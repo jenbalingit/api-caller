@@ -36,10 +36,10 @@ namespace PopAppShops.API.API
 
         }
         
-        public async Task<string> GetBranchInventory(string sku)
+        public async Task<KeyValuePair<string,string>> GetBranchInventory(string sku)
         {
             var result = await caller.InvokeWithHeader($"{ServiceConfig.BaseUrl}/Serial?sku={sku}", string.Empty, HttpMethod.Get);
-            return result;
+            return new KeyValuePair<string, string>(sku, result);
             
         }
     }

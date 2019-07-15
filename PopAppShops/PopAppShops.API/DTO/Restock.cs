@@ -22,7 +22,9 @@ namespace PopAppShops.API.DTO
             SerialNumber = inventoryUnique.SerialNumber;
             Status = inventoryUnique.Status;
             Quantity = inventoryUnique.Quantity;
-
+            InvoiceNumber = inventoryUnique.InvoiceNumber;
+            TransactionNo = inventoryUnique.TransactionNo;
+            TransactionNumber = inventoryUnique.TransactionNo;
         }
 
         public string Sku { get; set; }
@@ -37,6 +39,7 @@ namespace PopAppShops.API.DTO
         public string TransactionNumber { get; set; }
         public SerialNumberStatus Status { get; set; }
         public string InvoiceNumber { get; set; }
+        public string TransactionNo { get; set; }
     }
 
     public enum SerialNumberStatus

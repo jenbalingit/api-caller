@@ -18,6 +18,8 @@ namespace PopAppShops.API.DTO
             SerialNumber = restock.SerialNumber;
             Sku = restock.Sku;
             Quantity = restock.Quantity;
+            TransactionNo = restock.TransactionNo;
+            TransactionNumber = restock.TransactionNo;
         }
 
 
@@ -45,5 +47,8 @@ namespace PopAppShops.API.DTO
         public int Quantity { get; set; }
 
         public string Sku { get; set; }
+
+        public string TransactionNo { get; set; }
+        public string TransactionNumber { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Core.Cryptography;
+using Newtonsoft.Json;
 using PopAppShops.API;
 using PopAppShops.API.API;
 using PopAppShops.API.DTO;
@@ -17,10 +18,18 @@ namespace PopAppShops.WinForm
     public partial class InventoryForm : Form
     {
         List<API.DTO.InventoryUniqueId> ListOfSerials = new List<InventoryUniqueId>();
+
+        List<KeyValuePair<int, string>> ListOfSKU = new List<KeyValuePair<int, string>>();
         private string GlobalSku = "PEPSI-PINAS";
         public InventoryForm()
         {
             InitializeComponent();
+            ListOfSKU.Add(new KeyValuePair<int, string>(0, "WMGN66DL-CPN00-L"));
+            ListOfSKU.Add(new KeyValuePair<int, string>(1, "WMGB20DB-CPN00-LX"));
+            ListOfSKU.Add(new KeyValuePair<int, string>(2, "WTGL26EL-CPNTY-LX"));
+            ListOfSKU.Add(new KeyValuePair<int, string>(3, "WMGL23DL-CPNMB-L"));
+            ListOfSKU.Add(new KeyValuePair<int, string>(4, "WMGD31EL-CPNM0-L"));
+
         }
 
 
@@ -28,41 +37,59 @@ namespace PopAppShops.WinForm
 
 
 
-        private async void button3_Click(object sender, EventArgs e)
+        private void button3_Click(object sender, EventArgs e)
         {
+            LoadStocks();
+
+        }
+
+        public async void LoadStocks()
+        {
+            ListOfSerials.Clear();
+            listView2.Items.Clear();
             var api = new API.API.Inventory();
-            var result = await api.GetBranchInventory(txtSku.Text);
-            var filter = JsonConvert.DeserializeObject<List<API.DTO.InventoryUniqueId>>(result);
-            ListOfSerials = filter.Where(w => w.Status == SerialNumberStatus.In).OrderBy(o => o.ID).ToList();
-            MessageBox.Show($"{ListOfSerials.Count()} Serial number loaded.");
 
-        }
+            List<Task<KeyValuePair<string, string>>> loadStocksTask = new List<Task<KeyValuePair<string, string>>>();
 
-
-        public async Task Process(SerialNumberStatus serialNumberStatus)
-        {
-            switch (serialNumberStatus)
+            Parallel.ForEach(ListOfSKU, item =>
             {
-                case SerialNumberStatus.In:
+                loadStocksTask.Add(api.GetBranchInventory(item.Value));
+            });
 
-                    break;
-                case SerialNumberStatus.Out:
-                    break;
-                case SerialNumberStatus.Sell:
-                    break;
-                default:
-                    break;
+
+
+            await System.Threading.Tasks.Task.WhenAll(loadStocksTask);
+
+
+            foreach (var item in loadStocksTask)
+            {
+                ListViewItem viewItem = new ListViewItem(item.Result.Key);
+                var filter = JsonConvert.DeserializeObject<List<API.DTO.InventoryUniqueId>>(item.Result.Value);
+                if (!filter.Count.Equals(0))
+                {
+                    var stocks = filter.Where(w => w.Status == SerialNumberStatus.In).OrderBy(o => o.ID).ToList();
+                    ListOfSerials.AddRange(stocks);
+                    viewItem.SubItems.Add(stocks.Count.ToString());
+                    listView2.Items.Add(viewItem);
+                }
+                else
+                {
+
+                    viewItem.SubItems.Add("0");
+                    listView2.Items.Add(viewItem);
+                }
+
             }
-
         }
 
         public async Task<Transactions> InventoryIn(Restock restock)
         {
 
-            
+
             var inv = new API.API.Inventory();
             var logic = await inv.Restock(restock);
-            return new API.DTO.Transactions {
+            return new API.DTO.Transactions
+            {
                 Message = logic,
                 Item = new InventoryUniqueId(restock),
                 Action = SerialNumberStatus.In
@@ -95,6 +122,7 @@ namespace PopAppShops.WinForm
             }
             else
             {
+
                 var getInitial = ListOfSerials.FirstOrDefault();
                 var getLast = ListOfSerials.LastOrDefault();
                 var entity = new API.DTO.InventoryUniqueId();
@@ -120,6 +148,43 @@ namespace PopAppShops.WinForm
 
         }
 
+        public InventoryUniqueId SelectSerialFromList(string sku)
+        {
+            var filterBySku = ListOfSerials.Where(w => w.ProductSKU == sku).ToList();
+
+
+            if (filterBySku.Count.Equals(0))
+            {
+                throw new Exception("Please load list of serials.");
+            }
+            else
+            {
+
+                var getInitial = filterBySku.FirstOrDefault();
+                var getLast = filterBySku.LastOrDefault();
+                var entity = new API.DTO.InventoryUniqueId();
+
+
+
+                while (entity.ID.Equals(0))
+                {
+                    int generatedId = GetRandom((int)getInitial.ID, (int)getLast.ID);
+                    var findIdFromList = filterBySku.FirstOrDefault(f => f.ID == generatedId);
+
+                    if (findIdFromList != null)
+                    {
+                        entity.Sku = findIdFromList.ProductSKU;
+                        entity = findIdFromList;
+                        ListOfSerials.Remove(findIdFromList);
+                    }
+
+
+                }
+                return entity;
+            }
+
+        }
+
         public int GetRandom(int start, int end)
         {
             Random rnd = new Random();
@@ -130,9 +195,10 @@ namespace PopAppShops.WinForm
         public async Task<Transactions> Sell(InventoryUniqueId uniqueId)
         {
             var c = new Checkout();
-            var res = await c.ExpressCheckoutOrder(CreateSellBody(txtSku.Text, uniqueId.SerialNumber));
+            var res = await c.ExpressCheckoutOrder(CreateSellBody(uniqueId.ProductSKU, uniqueId.SerialNumber));
 
-            return new API.DTO.Transactions {
+            return new API.DTO.Transactions
+            {
                 Message = res,
                 Action = SerialNumberStatus.Sell,
                 Item = uniqueId
@@ -163,13 +229,15 @@ namespace PopAppShops.WinForm
                 SerialNumber = serialNumber,
                 CustomerId = 13,
                 Quantity = 1,
+                TransactionNumber = Guid.NewGuid().ToString("N"),
+                TransactionNo = Guid.NewGuid().ToString("N"),
                 Warranty = new API.DTO.DTOs.NewWarranty
                 {
                     warranty_class = "Private",
                     plate_number = $"{this.GenerateName(2)}14{rnd1.Next(9)}{rnd2.Next(9)}{rnd3.Next(9)}",
                     date_expire = DateTime.UtcNow.AddYears(2),
                     date_purchase = DateTime.UtcNow,
-                    sku = txtSku.Text,
+                    sku = sku,
                     first_name = this.GenerateName(5),
                     last_name = this.GenerateName(5),
                     InvoiceNumber = DateTime.UtcNow.Ticks.ToString(),
@@ -184,7 +252,7 @@ namespace PopAppShops.WinForm
         }
 
         public string GenerateName(int size)
-        { 
+        {
             StringBuilder builder = new StringBuilder();
             Random random = new Random();
             char ch;
@@ -195,110 +263,144 @@ namespace PopAppShops.WinForm
             }
 
 
-           return builder.ToString().ToLower();
+            return builder.ToString().ToLower();
         }
 
         List<API.DTO.Transactions> Transactions = new List<Transactions>();
         List<Task<Transactions>> Task = new List<Task<Transactions>>();
-        private async void BtnGenerateTransactions_Click(object sender, EventArgs e)
+        List<Transactions> GenTransactions = new List<Transactions>();
+        private void BtnGenerateTransactions_Click(object sender, EventArgs e)
+        {
+            GenTransactions.Clear();
+            listView1.Items.Clear();
+
+            GenerateTransaction();
+
+            foreach (var item in GenTransactions.OrderBy(o => o.Item.ProductSKU).ToList())
+            {
+                ListViewItem viewItem = new ListViewItem(item.Action.ToString());
+                viewItem.SubItems.Add(item.Item.ProductSKU);
+                viewItem.SubItems.Add(item.Item.SerialNumber);
+
+                listView1.Items.Add(viewItem);
+            }
+
+        }
+
+        public async void ExecuteTransaction()
+        {
+            foreach (var item in GenTransactions)
+            {
+                switch (item.Action)
+                {
+                    case SerialNumberStatus.In:
+
+                        Task.Add(InventoryIn(new Restock(new InventoryUniqueId()
+                        {
+                            ProductId = 3869,
+                            SerialNumber = item.Item.SerialNumber,
+                            Sku = item.Item.ProductSKU,
+                            Quantity = 1,
+                            InvoiceNumber = Guid.NewGuid().ToString("N"),
+                            TransactionNumber = Guid.NewGuid().ToString("N"),
+                            TransactionNo = Guid.NewGuid().ToString("N")
+                        })));
+                        break;
+                    case SerialNumberStatus.Out:
+
+                        var outSerial = item.Item;
+                        outSerial.Quantity = -1;
+                        outSerial.InvoiceNumber = Guid.NewGuid().ToString("N");
+                        Task.Add(InventoryOut(new Restock(outSerial)));
+                        break;
+                    case SerialNumberStatus.Sell:
+
+                        var sellSerial = item.Item;
+                        Task.Add(Sell(sellSerial));
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            await System.Threading.Tasks.Task.WhenAll(Task);
+        }
+
+        public void GenerateTransaction()
         {
             try
             {
-                Task.Clear();
-                Transactions.Clear();
-                listView1.Items.Clear();
                 Random rnd = new Random();
-                for (int i = 0; i < Convert.ToInt32(txttransCount.Text); i++)
+                for (int i = 0; i < Convert.ToUInt32(txttransCount.Text); i++)
                 {
-                    
-                    var trans = (SerialNumberStatus)rnd.Next(0, 3);
-                    
-                    switch (trans)
+                    var action = rnd.Next(2);
+
+                    var selectSerial = SelectSerialFromList();
+
+
+                    if (action == 0)
                     {
-                        case SerialNumberStatus.In:
-                            var serial = Guid.NewGuid().ToString("N");
-                            Task.Add(InventoryIn(new Restock(new InventoryUniqueId()
-                            {
-                                ProductId = 3869,
-                                SerialNumber = serial,
-                                Sku = txtSku.Text,
-                                Quantity = 1
+                        string serialIn = Guid.NewGuid().ToString("N");
+                        selectSerial.SerialNumber = serialIn;
+                        ListOfSerials.Add(selectSerial);
 
-                            })));
-                            break;
-                        case SerialNumberStatus.Out:
-                            
-                            var outSerial = SelectSerialFromList();
-                            outSerial.Quantity = -1;
-                            Task.Add(InventoryOut(new Restock(outSerial)));
-                            break;
-                        case SerialNumberStatus.Sell:
-                            
-                            var sellSerial = SelectSerialFromList();
-                           
-                            Task.Add(Sell(sellSerial));
-                            break;
-                        default:
-                            break;
+
                     }
-                  
+
+
+                    GenTransactions.Add(new API.DTO.Transactions
+                    {
+                        Action = (SerialNumberStatus)action,
+                        Item = selectSerial
+                    });
+
+
                 }
 
-                var finalresult = await System.Threading.Tasks.Task.WhenAll(Task);
-                foreach (var item in finalresult)
-                {
-                    ListViewItem lvi = new ListViewItem(item.Action.ToString());
-                    lvi.SubItems.Add(item.Item.SerialNumber);
-                    lvi.SubItems.Add(item.Message);
-
-                    listView1.Items.Add(lvi);
-                }
 
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
 
+                MessageBox.Show(ex.Message);
             }
 
         }
 
-       
-
         private async void button1_Click(object sender, EventArgs e)
         {
-            var res = await InventoryIn(new API.DTO.Restock
-            {
-                ProductId = 3869,
-                SerialNumber = txtSerial.Text,
-                Sku = txtSku.Text,
-                Quantity = 1,
-                InvoiceNumber = Guid.NewGuid().ToString("N")
+            //var res = await InventoryIn(new API.DTO.Restock
+            //{
+            //    ProductId = 3869,
+            //    SerialNumber = txtSerial.Text,
+            //    Sku = txtSku.Text,
+            //    Quantity = 1,
+            //    InvoiceNumber = Guid.NewGuid().ToString("N")
 
-            });
+            //});
 
-            MessageBox.Show(res.Message);
+            //MessageBox.Show(res.Message);
         }
 
         private async void button2_Click(object sender, EventArgs e)
         {
-            await InventoryOut(new Restock
-            {
-                Sku = txtSku.Text,
-                ProductId = 3869,
-                BranchId = 10,
-                Quantity = -1,
-                SerialNumber = txtSerial.Text
-                , InvoiceNumber = Guid.NewGuid().ToString("N")
-            });
+            //await InventoryOut(new Restock
+            //{
+            //    Sku = txtSku.Text,
+            //    ProductId = 3869,
+            //    BranchId = 10,
+            //    Quantity = -1,
+            //    SerialNumber = txtSerial.Text,
+            //    InvoiceNumber = Guid.NewGuid().ToString("N")
+            //});
         }
 
         private async void button4_Click(object sender, EventArgs e)
         {
-            var checkoutData = CreateSellBody(txtSku.Text, txtSerial.Text);
-            var api = new API.API.Checkout();
-            var raw = await api.ExpressCheckoutOrder(checkoutData);
-            MessageBox.Show(raw);
+            //var checkoutData = CreateSellBody(txtSku.Text, txtSerial.Text);
+            //var api = new API.API.Checkout();
+            //var raw = await api.ExpressCheckoutOrder(checkoutData);
+            //MessageBox.Show(raw);
 
         }
 
@@ -316,5 +418,105 @@ namespace PopAppShops.WinForm
                 MessageBox.Show(ex.Message);
             }
         }
+
+        private void lblCurrentStock_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            if (ListOfSerials.Count().Equals(0))
+            {
+                MessageBox.Show("Please reload sku stock first.");
+            }
+            else
+            {
+                ResetStocks();
+
+
+            }
+        }
+
+        public async void ResetStocks()
+        {
+            try
+            {
+                var groupStocks = ListOfSerials.GroupBy(g => g.ProductSKU).Select(s => new { ProductSku = s.Key, Stocks = s.Count() });
+
+                foreach (var item in ListOfSKU)
+                {
+                    int current = 0;
+                    var getCurrentStocks = groupStocks.FirstOrDefault(s => s.ProductSku == item.Value);
+                    if (getCurrentStocks == null)
+                    {
+                        current = 0;
+                    }
+                    else
+                    { current = getCurrentStocks.Stocks; }
+
+                    int @base = Convert.ToInt32(txtbasestocks.Text);
+
+                    if (current > @base)
+                    {
+                        List<Task<Transactions>> TaskOut = new List<Task<Transactions>>();
+                        int stockToDeduct = current - @base;
+                        for (int i = 0; i < stockToDeduct; i++)
+                        {
+                            var outSerial = SelectSerialFromList(item.Value);
+                            outSerial.Quantity = -1;
+                            outSerial.InvoiceNumber = Guid.NewGuid().ToString("N");
+                            outSerial.TransactionNo = Guid.NewGuid().ToString("N");
+                            outSerial.TransactionNumber = Guid.NewGuid().ToString("N");
+                            TaskOut.Add(InventoryOut(new Restock(outSerial)));
+                        }
+                        await System.Threading.Tasks.Task.WhenAll(TaskOut);
+                    }
+                    else
+                    {
+                        List<Task<Transactions>> TaskIn = new List<Task<Transactions>>();
+                        int stockToDeduct = @base - current;
+                        for (int i = 0; i < stockToDeduct; i++)
+                        {
+                            TaskIn.Add(InventoryIn(new API.DTO.Restock
+                            {
+                                ProductId = 3869,
+                                SerialNumber = Guid.NewGuid().ToString("N"),
+                                Sku = item.Value,
+                                Quantity = 1,
+                                InvoiceNumber = Guid.NewGuid().ToString("N"),
+                                TransactionNo = Guid.NewGuid().ToString("N"),
+                                TransactionNumber = Guid.NewGuid().ToString("N")
+                            }));
+                        }
+                        await System.Threading.Tasks.Task.WhenAll(TaskIn);
+                    }
+
+                }
+
+
+            }
+            catch (Exception ex)
+            {
+
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        private void InventoryForm_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button5_Click_1(object sender, EventArgs e)
+        {
+            ExecuteTransaction();
+        }
     }
+
+
+
+
 }
+
+

@@ -31,6 +31,8 @@ namespace PopAppShops.API.DTO.DTOs
         public UserType UserType { get; set; }
         public long DiscountId { get; set; }
         public NewWarranty Warranty { get; set; }
+        public string TransactionNumber { get; set; }
+        public string TransactionNo { get; set; }
     }
 
     public class NewWarranty

@@ -359,6 +359,7 @@ namespace PopAppShops.WinForm
             new InventoryForm().ShowDialog();
 
 
+
         }
 
         private void iNToolStripMenuItem_Click(object sender, EventArgs e)
@@ -394,7 +395,7 @@ namespace PopAppShops.WinForm
         {
             var api = new API.API.Inventory();
             var logic = await api.GetBranchInventory(txtsearch.Text);
-            LogText(logic);
+            LogText(logic.Value);
         }
 
         private void toolStripMenuItem2_Click(object sender, EventArgs e)
