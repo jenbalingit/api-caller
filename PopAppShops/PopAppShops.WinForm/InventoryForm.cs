@@ -28,7 +28,7 @@ namespace PopAppShops.WinForm
             ListOfSKU.Add(new KeyValuePair<int, string>(1, "WMGB20DB-CPN00-LX"));
             ListOfSKU.Add(new KeyValuePair<int, string>(2, "WTGL26EL-CPNTY-LX"));
             ListOfSKU.Add(new KeyValuePair<int, string>(3, "WMGL23DL-CPNMB-L"));
-            ListOfSKU.Add(new KeyValuePair<int, string>(4, "WMGD31EL-CPNM0-L"));
+            //ListOfSKU.Add(new KeyValuePair<int, string>(4, "WMGD31EL-CPNM0-L"));
 
         }
 
@@ -38,7 +38,40 @@ namespace PopAppShops.WinForm
 
 
 
+        public async Task<List<API.DTO.InventoryUniqueId>> LoadStockForReset()
+        {
+            ListOfSerials.Clear();
+            listView2.Items.Clear();
+            var api = new API.API.Inventory();
 
+            List<Task<KeyValuePair<string, string>>> loadStocksTask = new List<Task<KeyValuePair<string, string>>>();
+
+            Parallel.ForEach(ListOfSKU, item =>
+            {
+                loadStocksTask.Add(api.GetBranchInventory(item.Value));
+            });
+
+
+
+            await System.Threading.Tasks.Task.WhenAll(loadStocksTask);
+
+            var @return = new List<API.DTO.InventoryUniqueId>();
+
+            foreach (var item in loadStocksTask)
+            {
+
+                var filter = JsonConvert.DeserializeObject<List<API.DTO.InventoryUniqueId>>(item.Result.Value);
+                if (!filter.Count.Equals(0))
+                {
+                    var stocks = filter.Where(w => w.Status == SerialNumberStatus.In).OrderBy(o => o.ID).ToList();
+                    @return.AddRange(stocks);
+                }
+
+
+            }
+
+            return @return;
+        }
         public async void LoadStocks()
         {
             ListOfSerials.Clear();
@@ -83,7 +116,8 @@ namespace PopAppShops.WinForm
 
 
             var inv = new API.API.Inventory();
-            var logic = await inv.Restock(restock);
+
+            var logic = await inv.BatchRestockInventory(new List<Restock> { restock });
             return new API.DTO.Transactions
             {
                 Message = logic,
@@ -149,7 +183,7 @@ namespace PopAppShops.WinForm
 
         public InventoryUniqueId SelectSerialFromList(string sku)
         {
-            var filterBySku = ListOfSerials.Where(w => w.ProductSKU == sku).ToList();
+            var filterBySku = stockStorage.Where(w => w.ProductSKU == sku).ToList();
 
 
             if (filterBySku.Count.Equals(0))
@@ -174,7 +208,7 @@ namespace PopAppShops.WinForm
                     {
                         entity.Sku = findIdFromList.ProductSKU;
                         entity = findIdFromList;
-                        ListOfSerials.Remove(findIdFromList);
+                        stockStorage.Remove(findIdFromList);
                     }
 
 
@@ -378,7 +412,8 @@ namespace PopAppShops.WinForm
                 SerialNumber = txtSerial.Text,
                 Sku = txtsku.Text,
                 Quantity = 1,
-                InvoiceNumber = Guid.NewGuid().ToString("N")
+                InvoiceNumber = Guid.NewGuid().ToString("N"),
+                TransactionNumber = Guid.NewGuid().ToString("N")
 
             });
 
@@ -430,38 +465,37 @@ namespace PopAppShops.WinForm
 
         private void button6_Click(object sender, EventArgs e)
         {
-            if (ListOfSerials.Count().Equals(0))
-            {
-                MessageBox.Show("Please reload sku stock first.");
-            }
-            else
-            {
-                ResetStocks();
+
+            ResetStocks();
 
 
-            }
+
         }
 
+
+        List<API.DTO.InventoryUniqueId> stockStorage = new List<InventoryUniqueId>();
         public async void ResetStocks()
         {
             try
             {
-                var groupStocks = ListOfSerials.GroupBy(g => g.ProductSKU).Select(s => new { ProductSku = s.Key, Stocks = s.Count() });
 
                 foreach (var item in ListOfSKU)
                 {
-                    int current = 0;
-                    var getCurrentStocks = groupStocks.FirstOrDefault(s => s.ProductSku == item.Value);
-                    if (getCurrentStocks == null)
-                    {
-                        current = 0;
-                    }
-                    else
-                    { current = getCurrentStocks.Stocks; }
+                    stockStorage.Clear();
+
+                    var api = new API.API.Inventory();
+                    var get = await api.GetBranchInventory(item.Value);
+                    var serializeResult = JsonConvert.DeserializeObject<List<API.DTO.InventoryUniqueId>>(get.Value);
+                    var filter = serializeResult.Where(c => c.Status == SerialNumberStatus.In);
+                    int current = filter.Count();
+                    stockStorage.AddRange(filter);
 
                     int @base = Convert.ToInt32(txtbasestocks.Text);
-
-                    if (current > @base)
+                    if (current.Equals(@base))
+                    {
+                        Console.WriteLine("Same stocks");
+                    }
+                    else if (current > @base)
                     {
                         List<Task<Transactions>> TaskOut = new List<Task<Transactions>>();
                         int stockToDeduct = current - @base;
@@ -528,7 +562,7 @@ namespace PopAppShops.WinForm
             listView2.Items.Clear();
             SkuStocks.Clear();
 
-           var stocks = ListOfSerials.GroupBy(s => s.ProductSKU).Select(s => new SkuStocks
+            var stocks = ListOfSerials.GroupBy(s => s.ProductSKU).Select(s => new SkuStocks
             {
                 SKU = s.Key,
                 Stocks = s.Count()
@@ -547,14 +581,14 @@ namespace PopAppShops.WinForm
 
                 baseStocks = baseStocks + getIn;
                 baseStocks = baseStocks - getOutAndSell;
-                
+
                 SkuStocks.Add(item);
                 lst.SubItems.Add(baseStocks.ToString());
 
                 listView2.Items.Add(lst);
             }
 
-           
+
         }
 
         private void txtsku_TextChanged(object sender, EventArgs e)

@@ -305,7 +305,8 @@ namespace PopAppShops.WinForm
 
         private void appMain_Load(object sender, EventArgs e)
         {
-
+            var appuserlogin = new appUserLogin(LogRequest);
+            appuserlogin.ShowDialog();
         }
 
         private async void cartCountToolStripMenuItem_Click(object sender, EventArgs e)

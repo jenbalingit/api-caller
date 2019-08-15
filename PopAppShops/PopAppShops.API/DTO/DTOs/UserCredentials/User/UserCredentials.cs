@@ -50,5 +50,6 @@ namespace PopAppShop.Backend.DTOs.User
 
         public long MerchantID { get; set; }
         public string ApplicationID { get; set; }
+        public long BranchId { get; set; }
     }
 }

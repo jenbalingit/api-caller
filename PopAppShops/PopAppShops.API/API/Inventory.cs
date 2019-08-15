@@ -28,6 +28,16 @@ namespace PopAppShops.API.API
 
         }
 
+
+
+        public async Task<string> BatchRestockInventory(List<Restock> restock)
+        {
+
+            var result = await caller.InvokeWithHeader($"{ServiceConfig.BaseUrl}/BatchRestockInventory", JsonConvert.SerializeObject(restock), HttpMethod.Put);
+            return result;
+
+        }
+
         public async Task<string> UpdateUnique(Restock restock)
         {
 
@@ -35,12 +45,12 @@ namespace PopAppShops.API.API
             return result;
 
         }
-        
-        public async Task<KeyValuePair<string,string>> GetBranchInventory(string sku)
+
+        public async Task<KeyValuePair<string, string>> GetBranchInventory(string sku)
         {
             var result = await caller.InvokeWithHeader($"{ServiceConfig.BaseUrl}/Serial?sku={sku}", string.Empty, HttpMethod.Get);
             return new KeyValuePair<string, string>(sku, result);
-            
+
         }
     }
 }

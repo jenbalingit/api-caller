@@ -23,7 +23,7 @@ namespace PopAppShops.WinForm
             {
                 MessageBox.Show(data.ExceptionMessage, data.Message, MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
             }, Logger);
-            txtemail.Text = "the.bikers.manila@basecamptech.ph";
+            txtemail.Text = "the.bikers.qc@basecamptech.ph";
             txtpassword.Text = "Qwerty1-8";
         }
 
@@ -33,13 +33,15 @@ namespace PopAppShops.WinForm
             {
                 EmailAddress = txtemail.Text,
                 ApplicationID = "MOTOLITE",
-                Password = txtpassword.Text
+                Password = txtpassword.Text,
+                BranchId = 607
             });
 
             if (result.IsSuccess)
             {
                 MessageBox.Show("Login Success", "Alert", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 new TextFileManager<string>(@"c:\popappsdata\authticket.txt").SaveChanges(result.Token.Replace("\"",""));
+                this.Hide();
             }
             else
                 MessageBox.Show(result.Message, "Alert", MessageBoxButtons.OK, MessageBoxIcon.Information);

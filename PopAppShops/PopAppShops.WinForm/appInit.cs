@@ -82,6 +82,7 @@ namespace PopAppShops.WinForm
                 lblstatus.Text = "App is already registered and Logged In.";
             }
             btnProceed.Visible = true;
+            btnProceed.Focus();
         }
 
         private void btnProceed_Click(object sender, EventArgs e)
